@@ -1,18 +1,14 @@
 import torch
 from torchvision import datasets, transforms
 
-import cvxpy as cp
 import torch
-from cvxpylayers.torch import CvxpyLayer
-import numpy as np
 
-import matplotlib.pyplot as plt
 import torch.nn as nn
 
 from lml import LML
 
 class KHopfield(nn.Module):
-    def __init__(self, N, n, p=2):
+    def __init__(self, N, n, p=1):
         # N is number of memories
         # n is dimension of memories
         super().__init__()
@@ -24,10 +20,12 @@ class KHopfield(nn.Module):
     def set_memories(self, memories):
         self.memories = torch.nn.Parameter(memories)
 
-    def set_memories_from_loader(self, loader, max_bathces=99999):
+    def set_memories_from_loader(self, loader, max_batches=99999):
         memories = []
         for batch in loader:
             memories.append(batch[0])
+            if len(memories) >= max_batches:
+                break
         memories = torch.cat(memories)
         self.set_memories(memories)
 
@@ -52,7 +50,7 @@ class KHopfield(nn.Module):
         # add batch dimension to X
 
         dists = torch.cdist(Xi, x, p=self.p)
-        return dists.squeeze(2) **2
+        return dists.squeeze(2)
 
     @staticmethod
     def ssm(x, k, beta):
@@ -105,6 +103,7 @@ class KHopfield(nn.Module):
         # Xi is N x n
         # x is b x n
         # result is b x N
+        print("beta:", beta)
         return  torch.softmax(-1*beta * self.get_dists(Xi, x), dim=1) 
     
 
