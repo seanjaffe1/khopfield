@@ -14,8 +14,15 @@ class KHopfield(nn.Module):
         super().__init__()
         self.N = N
         self.n = n
-        self.memories = nn.Parameter(torch.randn(N, n))
+        self.memories = nn.Parameter(torch.randn(N, n,) * .1, requires_grad=True)
+        # register memories
         self.p = p
+    
+
+    def to(self, device):
+        super().to(device)
+        self.memories = self.memories.to(device)
+        return self
     
     def set_memories(self, memories):
         self.memories = torch.nn.Parameter(memories)
@@ -63,13 +70,13 @@ class KHopfield(nn.Module):
         # k is int
         # returns b x N x k
         assert(k>=1)
-        result = torch.zeros(x.shape[0], x.shape[1], k)
+        result = torch.zeros(x.shape[0], x.shape[1], k).to(x.device)
         result[:, :, 0] =self.ssm(x, 1, beta)
         last_ssm = result[:, :, 0]
         for i in range(1, k):
             new_ssm  = self.ssm(x, i+1, beta)
             result[:, :, i] = new_ssm - last_ssm
-            last_ssm = new_ssm
+            last_ssm = new_ssm.clone()
         return result
 
     def hopfield(self, Xi,  x, beta):
@@ -84,7 +91,6 @@ class KHopfield(nn.Module):
         # x is b x n
         # beta, k are scalar
         assert(Xi.shape[1] == x.shape[1])
-
         dists = self.get_dists(Xi, x)
         # dists is b x N
         ksm = self.k_softmax(beta, -1 *dists, k)
