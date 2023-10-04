@@ -155,6 +155,7 @@ class LML_Function(Function):
                 nu_lower[J] -= 7.
 
         if ctx.verbose >= 0 and np.any(I.cpu().numpy()):
+            pass #TODO delete
             print('LML Warning: Did not converge.')
             # import ipdb; ipdb.set_trace()
 
