@@ -15,62 +15,6 @@ import pandas as pd
 
 
     
-# Define the Vision Transformer model
-class VisionTransformer(nn.Module):
-    def __init__(self, num_classes, embed_dim, dim, num_heads, img_size, patch_size, in_channels=3):
-        super(VisionTransformer, self).__init__()
-        self.num_patches = (img_size // patch_size) ** 2
-        self.patch_embedding = nn.Conv2d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.positional_embedding = nn.Parameter(torch.randn(1, self.num_patches, embed_dim))
-        self.hopfield = KHopfield(N=dim, n=embed_dim * self.num_patches)
-        self.fc = nn.Linear(embed_dim * self.num_patches, num_classes)
-        self.num_heads = num_heads
-
-    def forward(self, x):
-        x1 = self.patch_embedding(x)  # (batch_size, embed_dim, num_patches_h, num_patches_w)
-        x2 = x1.permute(0, 2, 3, 1)  # (batch_size, num_patches_h, num_patches_w, embed_dim)
-        x3 = x2.reshape(x2.size(0), -1, x2.size(-1))  # (batch_size, num_patches, embed_dim)
-        
-        x4 = x3 + self.positional_embedding  # Add positional embedding
-        # combine second and third dimension
-        x5 = x4.flatten(1, 2)
-        x6 = self.hopfield(x5, self.num_heads)
-        x7 = x6.mean(dim=2)  # Global average pooling
-        x8 = self.fc(x7)
-        return x8
-    
-    def to(self, device):
-        super(VisionTransformer, self).to(device)
-        self.hopfield = self.hopfield.to(device)
-        return self
-    
-# Uses #num_heads k=1 hopfield networks, rather than k=num_heads-hopfield networks
-class VisionTransformerV(nn.Module):
-    def __init__(self, num_classes, embed_dim, dim, num_heads, img_size, patch_size, in_channels=3):
-        super(VisionTransformerV, self).__init__()
-        self.num_patches = (img_size // patch_size) ** 2
-        self.patch_embedding = nn.Conv2d(in_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
-        self.positional_embedding = nn.Parameter(torch.randn(1, self.num_patches, embed_dim))
-
-        self.hopfields = nn.ModuleList([KHopfield(N=dim, n=embed_dim * self.num_patches) for _ in range(num_heads)])
-        self.fc = nn.Linear(embed_dim * self.num_patches, num_classes)
-        self.num_heads = num_heads
-
-    def forward(self, x):
-        x1 = self.patch_embedding(x)  # (batch_size, embed_dim, num_patches_h, num_patches_w)
-        x2 = x1.permute(0, 2, 3, 1)  # (batch_size, num_patches_h, num_patches_w, embed_dim)
-        x3 = x2.reshape(x2.size(0), -1, x2.size(-1))  # (batch_size, num_patches, embed_dim)
-        
-        x4 = x3 + self.positional_embedding  # Add positional embedding
-        # combine second and third dimension
-        x5 = x4.flatten(1, 2)
-        x6 = [self.hopfields[i](x5, 1) for i in range(self.num_heads)]
-        # take average of all heads
-        x6 = torch.stack(x6, dim=2).squeeze()
-        x7 = x6.mean(dim=2)  # Global average pooling
-        x8 = self.fc(x7)
-        return x8
-    
 def validate(model, val_loader):
     model.eval()
     correct = 0
@@ -87,65 +31,55 @@ def validate(model, val_loader):
     return 100 * correct / total
 
 def get_model_and_data(
-        data = 'mnist',
-        model = 'hopfield',
+        data = 'cifar10',
+        model_name = 'vit_hopfield',
         batch_size = 256,
-        heads = 4,
-        dim=256,
-        embed_dim=1024):
+        heads = 4):
     if data == 'mnist':
-        transform = transforms.Compose([transforms.ToTensor()])
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
         train_dataset = torchvision.datasets.MNIST(root='~/data', train=True, transform=transforms.ToTensor(), download=True)
         test_dataset = torchvision.datasets.MNIST(root='~/data', train=False, transform=transforms.ToTensor(), download=True)
         img_size = 28
         in_channels = 1
         num_classes = 10
-        patch_size = 7
 
     elif data  == 'cifar10':
-        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.4914, 0.4822, 0.4465),(0.2023, 0.1994, 0.2010))])
 
         train_dataset = torchvision.datasets.CIFAR10(root='~/data', train=True, transform=transform, download=True)
         test_dataset = torchvision.datasets.CIFAR10(root='~/data', train=False, transform=transform, download=True)
         img_size = 32
         in_channels = 3
         num_classes = 10
-        patch_size = 16
     else:
         raise Exception('data not found')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
 
-    if model == 'hopfield':
-        model = VisionTransformer(
-            num_classes = num_classes, 
-            embed_dim = embed_dim, 
-            dim = dim,
-            num_heads = heads, 
-            img_size = img_size, 
-            patch_size = patch_size, 
-            in_channels = in_channels,
-        )
-    elif model == 'hopfieldV':
-        model = VisionTransformerV(
-            num_classes = num_classes, 
-            embed_dim = embed_dim, 
-            dim = dim,
-            num_heads = heads, 
-            img_size = img_size, 
-            patch_size = patch_size, 
-            in_channels = in_channels,
-        )
-    elif model == 'vit':
-        model = SimpleViT(
+
+    patch_size= 4
+    if model_name == 'vit':
+        model = ViT(
             image_size = img_size,
             patch_size = patch_size,
             num_classes = num_classes,
-            dim = dim,
-            depth = 1,
+            dim = 128,
+            depth = 2,
             heads = heads,
-            mlp_dim = 1024
+            mlp_dim = 512,
+            channels = in_channels,
+        )
+    elif model_name == 'vit_hopfield':
+        model = HopfieldViT(
+            image_size = img_size,
+            patch_size = patch_size,
+            num_classes = num_classes,
+            dim = 128,
+            depth = 2,
+            heads = heads,
+            mlp_dim = 512,
+            channels = in_channels,
         )
     return model, train_loader, test_loader
 
@@ -174,7 +108,6 @@ def run_experiment(train_loader, test_loader, model, num_epochs=30, k=1):
             loss.backward()
             optimizer.step()
             pbar.set_description(f'K: {k}, Epoch [{epoch + 1}/{num_epochs}] Loss: {loss.item():.4f}')
-            break
         # validate
         accuracy = validate(model, test_loader)
 
@@ -189,17 +122,15 @@ def run_experiment(train_loader, test_loader, model, num_epochs=30, k=1):
 ks = [1, 4, 8, 16]
 
 df = pd.DataFrame(columns = ['k', 'accuracy', 'model', 'epoch'])
-datas = [ 'cifar10', 'mnist']
-model_names = ['hopfieldV', 'hopfield', 'vit']
+datas = ['mnist'] #[ 'cifar10']
+model_names = ['vit', 'vit_hopfield']
 
-datas = ['mnist']
-model_names = ['vit']
 for data in datas:
     for model_name in model_names:
         for k in ks:
             try:
-                model, train_loader, test_loader = get_model_and_data(data = data, model = model_name, batch_size = 256, heads = k, dim=100)
-                val_accuracy  = run_experiment(train_loader, test_loader, model, num_epochs=30, k =k )
+                model, train_loader, test_loader = get_model_and_data(data = data, model_name = model_name, batch_size = 256, heads = k)
+                val_accuracy  = run_experiment(train_loader, test_loader, model, num_epochs=100, k =k )
                 # add every val accuracy to dataframe
                 for i, acc in enumerate(val_accuracy):
                     df = df.append({'k': k, 'accuracy': acc, 'model': 'hopfield', 'epoch': i}, ignore_index=True)

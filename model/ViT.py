@@ -4,7 +4,7 @@ from torch import nn
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 
-from .lml2 import LML2
+from .lml3 import LML3
 # helpers
 
 def pair(t):
@@ -59,8 +59,6 @@ class Attention(nn.Module):
 
         attn = self.attend(dots)
 
-        print(torch.sum(attn, dim=-1),
-              torch.sum(attn, dim=-1).shape)
         attn = self.dropout(attn)
 
         out = torch.matmul(attn, v)
@@ -92,7 +90,7 @@ class KhopfieldAttention(nn.Module):
     @staticmethod
     def ssm(x, k, beta):
         # x in b x n
-        return LML2(N=k, n_iter = 200,eps = 1e-3)(beta * x)
+        return LML3(N=k, n_iter = 200,eps = 1e-3)(beta * x)
 
 
     def k_softmax(self, beta, x, k):
@@ -104,13 +102,10 @@ class KhopfieldAttention(nn.Module):
         result = torch.zeros(x.shape[0], x.shape[1], k).to(x.device)
         result[:, :, 0] =self.ssm(x, 1, beta)
         last_ssm = result[:, :, 0]
-        print(last_ssm.shape)
-        print("sum of last_ssm", torch.sum(last_ssm))
         for i in range(1, k):
             new_ssm  = self.ssm(x, i+1, beta)
             result[:, :, i] = new_ssm - last_ssm
             last_ssm = new_ssm.clone()
-            print("sum of last_ssm", torch.sum(last_ssm, dim=1))
         return result
 
     def forward(self, x):
@@ -126,12 +121,9 @@ class KhopfieldAttention(nn.Module):
         dots = dots.squeeze()
 
         dots = rearrange(dots, 'b n d -> (b n) d')
-        print(dots.shape)
 
         attn = self.k_softmax(beta = 1, x=dots, k=self.heads)
 
-        print(attn.shape)
-        print(torch.sum(attn, dim=1))
 
         attn = rearrange(attn, '(b n) d h -> b h n d', b = x.shape[0], n = x.shape[1])
         

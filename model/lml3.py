@@ -65,16 +65,21 @@ class LML_Function(Function):
         
         nu_lower = -x_sorted[:,ctx.N-1]
         nu_upper = -x_sorted[:,ctx.N]
-        
+        #alpha = 1/(x.shape[1])
         lam_est = 0.5*(nu_lower + nu_upper)
         res = torch.sum(torch.sigmoid(x+lam_est.unsqueeze(1)), dim=1) - ctx.N
         # 4 Newton iterations
         for i in range(n_iter):
             lam_big = lam_est.unsqueeze(1)
+            #if torch.linalg.norm(res, float('inf')) <= 10*eps:   
             lam_est = lam_est - (res)/(torch.sum(torch.sigmoid(x+lam_big)*(1.-torch.sigmoid(x+lam_big)),dim=1) + 1e-8)
-            res = torch.sum(torch.sigmoid(x+lam_big), dim=1) - ctx.N
-            if torch.max(torch.abs(res)) <= eps:
+            #else:
+            #    lam_est = lam_est - (1/(i+1))*2*res*torch.sum(torch.sigmoid(x+lam_big)*(1.-torch.sigmoid(x+lam_big)),dim=1)
+            res = torch.sum(torch.sigmoid(x+lam_est.unsqueeze(1)), dim=1) - ctx.N
+            if torch.linalg.norm(res, float('inf')) <= eps:
                 break
+            elif i == n_iter - 1:
+                print("SSM didn't converge")
         nu = lam_est
         y = torch.sigmoid(x+lam_est.unsqueeze(1))
         ctx.save_for_backward(x, y, nu)
