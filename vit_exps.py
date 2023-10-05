@@ -12,8 +12,30 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 from tqdm import tqdm
 
 import pandas as pd
+from datasets import load_dataset
 
+class TinyImagenetDataset(torch.utils.data.Dataset):
+    def __init__(self, dataset):
+        #dataset =  load_dataset("zh-plus/tiny-imagenet", split='valid')
+        self.imgs = []
+        self.labels = []
+        for i, d in enumerate(dataset):
+            
+            img = transforms.ToTensor()(d['image'])
+            if img.shape[0] == 3 and img.shape[1] == 64 and img.shape[2] == 64:
+                self.imgs.append(img)
+                self.labels.append(d['label'])
 
+        self.n = len(self.imgs)
+        
+    def __len__(self):
+        return self.n
+    
+    def __getitem__(self, idx):
+        return self.imgs[idx], self.labels[idx]
+    
+    def __repr__(self):
+        return f"TinyImagenetDataset(n={self.n})"
     
 def validate(model, val_loader):
     model.eval()
@@ -51,6 +73,23 @@ def get_model_and_data(
         img_size = 32
         in_channels = 3
         num_classes = 10
+    elif data =='tinyimagenet':
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))])
+        train_dataset = load_dataset("zh-plus/tiny-imagenet", split='train')
+        train_dataset = TinyImagenetDataset(train_dataset)
+        test_dataset = load_dataset("zh-plus/tiny-imagenet", split='valid')
+        test_dataset = TinyImagenetDataset(test_dataset)
+        img_size = 64
+        in_channels = 3
+        num_classes = 200
+    elif data == 'cifar100':
+        transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5071, 0.4867, 0.4408),(0.2675, 0.2565, 0.2761))])
+        train_dataset = torchvision.datasets.CIFAR100(root='~/data', train=True, transform=transform, download=True)
+        test_dataset = torchvision.datasets.CIFAR100(root='~/data', train=False, transform=transform, download=True)
+        img_size = 32
+        in_channels = 3
+        num_classes = 100
+    
     else:
         raise Exception('data not found')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -119,24 +158,34 @@ def run_experiment(train_loader, test_loader, model, num_epochs=30, k=1):
     return val_accuracy
 
 
-ks = [1, 4, 8, 16]
-
+ks = [8, 4,  1, 16]
 df = pd.DataFrame(columns = ['k', 'accuracy', 'model', 'epoch'])
-datas = ['mnist'] #[ 'cifar10']
-model_names = ['vit', 'vit_hopfield']
+datas =[ 'tinyimagenet']
+model_names = ['vit_hopfield', 'vit']
 
 for data in datas:
     for model_name in model_names:
         for k in ks:
+   
+
             try:
-                model, train_loader, test_loader = get_model_and_data(data = data, model_name = model_name, batch_size = 256, heads = k)
-                val_accuracy  = run_experiment(train_loader, test_loader, model, num_epochs=100, k =k )
+                print(f'running {data}, {model_name}, {k}')
+                batch_size = 150 if (data == 'tinyimagenet' and k==16) else 256
+                if data == 'tinyimagenet':
+                    epochs = 30
+                else:
+                    epochs = 100
+                model, train_loader, test_loader = get_model_and_data(data = data, model_name = model_name, batch_size = batch_size, heads = k)
+                val_accuracy  = run_experiment(train_loader, test_loader, model, num_epochs=epochs, k =k )
                 # add every val accuracy to dataframe
                 for i, acc in enumerate(val_accuracy):
                     df = df.append({'k': k, 'accuracy': acc, 'model': 'hopfield', 'epoch': i}, ignore_index=True)
                 
                 # save dataframe
                 df.to_csv(f'./results/{data}_{model_name}_heads.csv')
+                if data == 'tinyimagenet':
+                    # save_model
+                    torch.save(model.state_dict(), f'./results/{data}_{model_name}_heads.pt')
             except Exception as e:
                 print(e)
                 print(f'failed on {data}, {model_name}, {k}')
