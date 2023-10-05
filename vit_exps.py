@@ -100,6 +100,7 @@ def get_model_and_data(
         img_size = 28
         in_channels = 1
         num_classes = 10
+        patch_size = 7
 
     elif data  == 'cifar10':
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
@@ -109,12 +110,12 @@ def get_model_and_data(
         img_size = 32
         in_channels = 3
         num_classes = 10
+        patch_size = 16
     else:
         raise Exception('data not found')
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    patch_size = 16
 
     if model == 'hopfield':
         model = VisionTransformer(
@@ -190,6 +191,9 @@ ks = [1, 4, 8, 16]
 df = pd.DataFrame(columns = ['k', 'accuracy', 'model', 'epoch'])
 datas = [ 'cifar10', 'mnist']
 model_names = ['hopfieldV', 'hopfield', 'vit']
+
+datas = ['mnist']
+model_names = ['vit']
 for data in datas:
     for model_name in model_names:
         for k in ks:
