@@ -5,7 +5,7 @@ import torch
 
 import torch.nn as nn
 
-from lml import LML
+from .lml3 import LML3
 
 class KHopfield(nn.Module):
     def __init__(self, N, n, p=1):
@@ -62,7 +62,7 @@ class KHopfield(nn.Module):
     @staticmethod
     def ssm(x, k, beta):
         # x in b x n
-        return LML(N=k, n_iter = 200,eps = 1e-3)(beta * x)
+        return LML3(N=k, n_iter = 200,eps = 1e-3)(beta * x)
 
     def k_softmax(self, beta, x, k):
         # x is b x N
